@@ -41,17 +41,16 @@ public class Star {
     @Builder.Default
     private boolean negative = false;
 
-    @Column(nullable = false)
+    @Column(name = "tail_effect", nullable = false)
     @Builder.Default
     private boolean tailEffect = false;
 
-    @Column(nullable = false)
+    @Column(name = "halo_effect", nullable = false)
     @Builder.Default
     private boolean haloEffect = false;
 
-    @Column(nullable = false)
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
@@ -61,7 +60,20 @@ public class Star {
     @Builder.Default
     private List<Reaction> reactions = new ArrayList<>();
 
-    @Column(nullable = false) @Builder.Default private int listenCount = 0;
-    @Column(nullable = false) @Builder.Default private int hugCount    = 0;
-    @Column(nullable = false) @Builder.Default private int strongCount = 0;
+    @Column(name = "listen_count", nullable = false)
+    @Builder.Default
+    private int listenCount = 0;
+
+    @Column(name = "hug_count", nullable = false)
+    @Builder.Default
+    private int hugCount = 0;
+
+    @Column(name = "strong_count", nullable = false)
+    @Builder.Default
+    private int strongCount = 0;
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) createdAt = LocalDateTime.now();
+    }
 }

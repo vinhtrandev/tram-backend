@@ -11,7 +11,7 @@ public class StarResponse {
     private double y;
     private double size;
     private double opacity;
-    private boolean isNegative;
+    private boolean negative;
     private boolean tailEffect;
     private boolean haloEffect;
     private int listenCount;

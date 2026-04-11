@@ -28,9 +28,13 @@ public class StarService {
             "áp lực", "stress", "đau", "thất bại", "tuyệt vọng"
     );
 
+    // ✅ thêm readOnly = true để tránh LazyInitializationException
+    @Transactional(readOnly = true)
     public List<StarResponse> getAllStars() {
         return starRepository.findTop200ByOrderByCreatedAtDesc()
-                .stream().map(this::toResponse).collect(Collectors.toList());
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     @Transactional
@@ -53,10 +57,9 @@ public class StarService {
 
         star = starRepository.save(star);
 
-        // Award points to author
+        // ✅ author đã được managed trong transaction, không cần save() riêng
         if (author != null) {
             author.addPoints(5);
-            userRepository.save(author);
         }
 
         return toResponse(star);
@@ -76,18 +79,18 @@ public class StarService {
                 .build();
         reactionRepository.save(reaction);
 
-        // Update denormalized counts
+        // ✅ star đã managed, chỉ cần set — Hibernate tự dirty-check
         switch (type) {
             case "listen" -> star.setListenCount(star.getListenCount() + 1);
             case "hug"    -> star.setHugCount(star.getHugCount() + 1);
             case "strong" -> star.setStrongCount(star.getStrongCount() + 1);
         }
-        starRepository.save(star);
 
-        // Award points to star's author
+        // ✅ không cần starRepository.save(star) vì star đã managed
+
         if (star.getAuthor() != null) {
             star.getAuthor().addPoints(3);
-            userRepository.save(star.getAuthor());
+            // ✅ không cần userRepository.save() vì author đã managed
         }
     }
 

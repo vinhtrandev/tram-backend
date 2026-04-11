@@ -3,6 +3,7 @@ package com.vinhtran.tram.controller;
 import com.vinhtran.tram.dto.StarRequest;
 import com.vinhtran.tram.dto.StarResponse;
 import com.vinhtran.tram.service.StarService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -24,9 +25,10 @@ public class StarController {
     }
 
     @PostMapping
-    public ResponseEntity<?> create(@RequestBody StarRequest req, Authentication auth) {
+    public ResponseEntity<?> create(@Valid @RequestBody StarRequest req, Authentication auth) {
         try {
-            String nickname = auth != null ? auth.getName() : "anonymous";
+            // ✅ lấy nickname từ JWT, không tin req.nickname từ client
+            String nickname = auth != null ? auth.getName() : null;
             StarResponse res = starService.createStar(req, nickname);
             return ResponseEntity.ok(res);
         } catch (Exception e) {
@@ -40,7 +42,10 @@ public class StarController {
                                    Authentication auth) {
         try {
             String type = body.get("type");
-            String nickname = auth != null ? auth.getName() : "anonymous";
+            if (type == null || !List.of("listen", "hug", "strong").contains(type)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Loại reaction không hợp lệ"));
+            }
+            String nickname = auth != null ? auth.getName() : null;
             starService.addReaction(id, type, nickname);
             return ResponseEntity.ok(Map.of("ok", true));
         } catch (Exception e) {

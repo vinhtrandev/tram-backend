@@ -22,31 +22,35 @@ public class User {
     @NotBlank @Size(min = 3, max = 50)
     private String nickname;
 
-    @Column(nullable = false)
+    @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
     @Column(nullable = false)
     @Builder.Default
     private long points = 0;
 
-    @Column(nullable = false)
-    @Builder.Default
-    private LocalDateTime createdAt = LocalDateTime.now();
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt;
 
-    @Column
+    @Column(name = "last_login")
     private LocalDateTime lastLogin;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "streak_dates", columnDefinition = "TEXT")
     @Builder.Default
     private String streakDates = "";
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "unlocked_items", columnDefinition = "TEXT")
     @Builder.Default
     private String unlockedItems = "";
 
     @OneToMany(mappedBy = "author", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     private List<Star> stars = new ArrayList<>();
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null) createdAt = LocalDateTime.now();
+    }
 
     public void addPoints(long amount) {
         this.points = Math.max(0, this.points + amount);
