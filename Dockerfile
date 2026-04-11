@@ -1,11 +1,11 @@
 
-FROM maven:3.9.6-eclipse-temurin-21 AS build
+cat > /e/tramtinhieuvutru/backend/Dockerfile << 'EOF'
 
 WORKDIR /app
 
-COPY pom.xml .
+COPY tram/pom.xml .
 
-COPY src ./src
+COPY tram/src ./src
 
 RUN mvn clean package -DskipTests
 
