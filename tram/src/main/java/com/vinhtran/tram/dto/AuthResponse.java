@@ -10,4 +10,5 @@ public class AuthResponse {
     private String nickname;
     private String token;
     private long points;
+    private String unlockedItems;
 }

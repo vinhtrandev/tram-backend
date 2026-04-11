@@ -10,6 +10,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -29,7 +32,7 @@ public class AuthService {
                 .build();
         user = userRepository.save(user);
         String token = jwtUtil.generateToken(user.getNickname());
-        return new AuthResponse(user.getId(), user.getNickname(), token, user.getPoints());
+        return new AuthResponse(user.getId(), user.getNickname(), token, user.getPoints(), user.getUnlockedItems());
     }
 
     @Transactional
@@ -40,9 +43,33 @@ public class AuthService {
             throw new RuntimeException("Sai mật danh hoặc chìa khóa");
         }
         user.setLastLogin(java.time.LocalDateTime.now());
-        // ✅ không cần gọi save() riêng vì đã trong @Transactional
-        // Hibernate tự dirty-check và update
         String token = jwtUtil.generateToken(user.getNickname());
-        return new AuthResponse(user.getId(), user.getNickname(), token, user.getPoints());
+        return new AuthResponse(user.getId(), user.getNickname(), token, user.getPoints(), user.getUnlockedItems());
+    }
+
+    @Transactional
+    public AuthResponse unlockItem(String nickname, String itemId, int price) {
+        User user = userRepository.findByNickname(nickname)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
+
+        if (user.getPoints() < price) {
+            throw new RuntimeException("Không đủ ✨ Tinh Tú");
+        }
+
+        String raw = user.getUnlockedItems() == null ? "" : user.getUnlockedItems();
+        List<String> unlocked = new ArrayList<>(
+                raw.isEmpty() ? List.of() : List.of(raw.split(","))
+        );
+
+        if (unlocked.contains(itemId)) {
+            throw new RuntimeException("Đã mở khóa rồi");
+        }
+
+        unlocked.add(itemId);
+        user.setUnlockedItems(String.join(",", unlocked));
+        user.addPoints(-price);
+
+        String token = jwtUtil.generateToken(user.getNickname());
+        return new AuthResponse(user.getId(), user.getNickname(), token, user.getPoints(), user.getUnlockedItems());
     }
 }

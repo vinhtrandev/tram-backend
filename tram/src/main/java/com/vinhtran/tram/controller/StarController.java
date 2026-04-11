@@ -27,7 +27,6 @@ public class StarController {
     @PostMapping
     public ResponseEntity<?> create(@Valid @RequestBody StarRequest req, Authentication auth) {
         try {
-            // ✅ lấy nickname từ JWT, không tin req.nickname từ client
             String nickname = auth != null ? auth.getName() : null;
             StarResponse res = starService.createStar(req, nickname);
             return ResponseEntity.ok(res);

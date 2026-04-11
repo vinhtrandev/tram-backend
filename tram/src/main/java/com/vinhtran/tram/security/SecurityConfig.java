@@ -51,10 +51,6 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    /**
-     * Khai báo UserDetailsService để Spring Security không tự sinh
-     * "generated security password" mỗi lần khởi động.
-     */
     @Bean
     public UserDetailsService userDetailsService() {
         return nickname -> userRepository.findByNickname(nickname)

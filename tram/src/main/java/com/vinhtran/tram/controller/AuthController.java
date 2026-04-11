@@ -6,6 +6,7 @@ import com.vinhtran.tram.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -31,6 +32,19 @@ public class AuthController {
     public ResponseEntity<?> login(@Valid @RequestBody AuthRequest req) {
         try {
             AuthResponse res = authService.login(req);
+            return ResponseEntity.ok(res);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/unlock")
+    public ResponseEntity<?> unlock(@RequestBody Map<String, String> body, Authentication auth) {
+        try {
+            String itemId = body.get("itemId");
+            int price = Integer.parseInt(body.get("price"));
+            String nickname = auth.getName();
+            AuthResponse res = authService.unlockItem(nickname, itemId, price);
             return ResponseEntity.ok(res);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
