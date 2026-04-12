@@ -38,13 +38,24 @@ public class AuthController {
         }
     }
 
+    // ✅ Cần JWT token
+    @GetMapping("/me")
+    public ResponseEntity<?> me(Authentication auth) {
+        try {
+            AuthResponse res = authService.getMe(auth.getName());
+            return ResponseEntity.ok(res);
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    // ✅ Cần JWT token
     @PostMapping("/unlock")
     public ResponseEntity<?> unlock(@RequestBody Map<String, String> body, Authentication auth) {
         try {
             String itemId = body.get("itemId");
-            int price = Integer.parseInt(body.get("price"));
             String nickname = auth.getName();
-            AuthResponse res = authService.unlockItem(nickname, itemId, price);
+            AuthResponse res = authService.unlockItem(nickname, itemId);
             return ResponseEntity.ok(res);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
