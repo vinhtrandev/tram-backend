@@ -38,7 +38,6 @@ public class StarService {
 
     @Transactional
     public StarResponse createStar(StarRequest req, String nickname) {
-        // FIX BUG 1: Dùng findByNickname đúng cách, tránh null nếu anonymous
         User author = (nickname != null && !nickname.isBlank())
                 ? userRepository.findByNickname(nickname).orElse(null)
                 : null;
@@ -46,8 +45,6 @@ public class StarService {
         boolean negative = NEGATIVE_KEYWORDS.stream()
                 .anyMatch(k -> req.getText().toLowerCase().contains(k));
 
-        // FIX BUG 2: tailEffect và haloEffect phải lấy từ User.unlockedItems
-        //            chứ không mặc định false mãi
         boolean hasTail = false;
         boolean hasHalo = false;
         if (author != null && author.getUnlockedItems() != null) {
@@ -70,11 +67,9 @@ public class StarService {
 
         star = starRepository.save(star);
 
-        // FIX BUG 3: QUAN TRỌNG NHẤT - phải save user sau addPoints
-        // Không save thì points tăng trong memory nhưng KHÔNG ghi vào DB
         if (author != null) {
             author.addPoints(5);
-            userRepository.save(author); // ← Thiếu dòng này là lý do DB không cập nhật!
+            userRepository.save(author);
         }
 
         return toResponse(star);
@@ -85,7 +80,6 @@ public class StarService {
         Star star = starRepository.findById(starId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy sao"));
 
-        // FIX: Tránh NPE khi senderNickname null (anonymous user)
         User sender = (senderNickname != null && !senderNickname.isBlank())
                 ? userRepository.findByNickname(senderNickname).orElse(null)
                 : null;
@@ -102,12 +96,10 @@ public class StarService {
             case "hug"    -> star.setHugCount(star.getHugCount() + 1);
             case "strong" -> star.setStrongCount(star.getStrongCount() + 1);
         }
-        // Star được save tự động vì đang trong @Transactional và là managed entity
 
-        // FIX BUG 3 (lại): author của star cũng cần save sau addPoints
         if (star.getAuthor() != null) {
             star.getAuthor().addPoints(3);
-            userRepository.save(star.getAuthor()); // ← Thiếu dòng này!
+            userRepository.save(star.getAuthor());
         }
     }
 
@@ -126,6 +118,7 @@ public class StarService {
         r.setListenCount(s.getListenCount());
         r.setHugCount(s.getHugCount());
         r.setStrongCount(s.getStrongCount());
+        r.setNickname(s.getAuthor() != null ? s.getAuthor().getNickname() : "Ẩn danh");
         return r;
     }
 }

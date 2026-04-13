@@ -17,4 +17,5 @@ public class StarResponse {
     private int listenCount;
     private int hugCount;
     private int strongCount;
+    private String nickname;
 }
