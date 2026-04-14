@@ -118,6 +118,9 @@ public class StarService {
         r.setListenCount(s.getListenCount());
         r.setHugCount(s.getHugCount());
         r.setStrongCount(s.getStrongCount());
+        r.setCreatedAt(s.getCreatedAt() != null
+                ? s.getCreatedAt().toString()
+                : null);
         r.setNickname(s.getAuthor() != null ? s.getAuthor().getNickname() : "Ẩn danh");
         return r;
     }
