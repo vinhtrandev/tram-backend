@@ -1,79 +1,90 @@
 package com.vinhtran.tram.entity;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.Getter;
+import lombok.Setter;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.Instant;
 
 @Entity
-@Table(name = "stars")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Table(name = "stars", indexes = {
+        @Index(name = "idx_stars_type_created", columnList = "type, created_at")
+})
+@Getter
+@Setter
 public class Star {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, length = 200)
+    @Column(columnDefinition = "TEXT")
     private String text;
 
-    @Column(nullable = false, length = 20)
-    @Builder.Default
-    private String type = "normal";
+    @Column(length = 20)
+    private String type;
+
+    private Double x;
+    private Double y;
 
     @Column(nullable = false)
-    private double x;
+    private Boolean moodPost = false;
 
     @Column(nullable = false)
-    private double y;
+    private Boolean negative = false;
 
     @Column(nullable = false)
-    @Builder.Default
-    private double size = 4.0;
+    private Boolean haloEffect = false;
 
     @Column(nullable = false)
-    @Builder.Default
-    private double opacity = 0.8;
+    private Boolean tailEffect = false;
 
     @Column(nullable = false)
-    @Builder.Default
-    private boolean negative = false;
+    private Double size = 4.0;
 
-    @Column(name = "tail_effect", nullable = false)
-    @Builder.Default
-    private boolean tailEffect = false;
+    @Column(nullable = false)
+    private Double opacity = 0.85;
 
-    @Column(name = "halo_effect", nullable = false)
-    @Builder.Default
-    private boolean haloEffect = false;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    @Column(length = 50)
+    private String nickname;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private User author;
 
-    @OneToMany(mappedBy = "star", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @Builder.Default
-    private List<Reaction> reactions = new ArrayList<>();
+    @Column(name = "created_at", nullable = false, updatable = false,
+            columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    private Instant createdAt;
 
-    @Column(name = "listen_count", nullable = false)
-    @Builder.Default
-    private int listenCount = 0;
+    @Column(name = "expired_at", columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    private Instant expiredAt;
 
-    @Column(name = "hug_count", nullable = false)
-    @Builder.Default
-    private int hugCount = 0;
-
-    @Column(name = "strong_count", nullable = false)
-    @Builder.Default
-    private int strongCount = 0;
+    @Column(nullable = false)
+    private int listenCount   = 0;
+    @Column(nullable = false)
+    private int hugCount      = 0;
+    @Column(nullable = false)
+    private int strongCount   = 0;
+    @Column(nullable = false)
+    private int treasureCount = 0;
+    @Column(nullable = false)
+    private int feelCount     = 0;
+    @Column(nullable = false)
+    private int thanksCount   = 0;
 
     @PrePersist
     protected void onCreate() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt  == null) createdAt  = Instant.now();
+        if (moodPost   == null) moodPost   = false;
+        if (negative   == null) negative   = false;
+        if (haloEffect == null) haloEffect = false;
+        if (tailEffect == null) tailEffect = false;
+        if (size       == null) size       = 4.0;
+        if (opacity    == null) opacity    = 0.85;
+    }
+
+    @Transient
+    public Long getUserId() {
+        return author != null ? author.getId() : null;
     }
 }

@@ -1,4 +1,3 @@
-// com/vinhtran/tram/controller/TransactionController.java
 package com.vinhtran.tram.controller;
 
 import com.vinhtran.tram.entity.Transaction;
@@ -10,6 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,46 +25,77 @@ public class TransactionController {
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
 
-    // GET /api/transactions — lấy lịch sử của user hiện tại
+    private static final DateTimeFormatter ISO_UTC =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
+                    .withZone(ZoneOffset.UTC);
+
+    private static final List<String> VALID_TYPES = List.of("earn", "spend", "bonus");
+
+    /** GET /api/transactions */
     @GetMapping
     public ResponseEntity<?> getHistory(Authentication auth) {
-        if (auth == null) return ResponseEntity.status(401).body(Map.of("message", "Chưa đăng nhập"));
+        if (auth == null || !auth.isAuthenticated())
+            return ResponseEntity.status(401).body(Map.of("message", "Chưa đăng nhập"));
 
         List<Transaction> txs = transactionRepository
                 .findTop50ByUserNicknameOrderByCreatedAtDesc(auth.getName());
 
-        List<Map<String, Object>> result = txs.stream().map(tx -> Map.<String, Object>of(
-                "id",     tx.getId(),
-                "type",   tx.getType(),
-                "amount", tx.getAmount(),
-                "desc",   tx.getDescription(),
-                "time",   tx.getCreatedAt().toString()
-        )).collect(Collectors.toList());
+        // FIX: Map.of() ném NullPointerException nếu value null (type/desc có thể null)
+        // Dùng HashMap thay thế để an toàn với null value
+        List<Map<String, Object>> result = txs.stream().map(tx -> {
+            String time = tx.getCreatedAt() != null
+                    ? ISO_UTC.format(tx.getCreatedAt())
+                    : ISO_UTC.format(Instant.now());
+
+            Map<String, Object> row = new HashMap<>();
+            row.put("id",     tx.getId());
+            row.put("type",   tx.getType()        != null ? tx.getType()        : "earn");
+            row.put("amount", tx.getAmount());
+            row.put("desc",   tx.getDescription() != null ? tx.getDescription() : "");
+            row.put("time",   time);
+            return row;
+        }).collect(Collectors.toList());
 
         return ResponseEntity.ok(result);
     }
 
-    // POST /api/transactions — ghi 1 giao dịch mới
+    /** POST /api/transactions */
     @PostMapping
     public ResponseEntity<?> addTransaction(
-            @RequestBody Map<String, String> body,
+            @RequestBody Map<String, Object> body,
             Authentication auth) {
 
-        if (auth == null) return ResponseEntity.status(401).body(Map.of("message", "Chưa đăng nhập"));
+        if (auth == null || !auth.isAuthenticated())
+            return ResponseEntity.status(401).body(Map.of("message", "Chưa đăng nhập"));
 
-        String nickname = auth.getName();
-        User user = userRepository.findByNickname(nickname).orElse(null);
-        // Nếu không tìm thấy user → bỏ qua (offline mode)
-        if (user == null) return ResponseEntity.ok(Map.of("ok", false, "message", "User not found"));
+        User user = userRepository.findByNickname(auth.getName()).orElse(null);
+        if (user == null)
+            return ResponseEntity.status(404).body(Map.of("message", "User not found"));
 
-        String type   = body.getOrDefault("type", "earn");
-        String desc   = body.getOrDefault("desc", "");
-        int amount;
+        String type = String.valueOf(body.getOrDefault("type", "earn")).trim();
+        if (!VALID_TYPES.contains(type)) type = "earn";
+
+        String desc = String.valueOf(body.getOrDefault("desc", "")).trim();
+        if (desc.length() > 200) desc = desc.substring(0, 200);
+
+        // FIX: parse an toàn cả Number và String
+        int amount = 0;
         try {
-            amount = Integer.parseInt(body.getOrDefault("amount", "0").replaceAll("[^0-9-]", ""));
-        } catch (NumberFormatException e) {
+            Object raw = body.get("amount");
+            if (raw instanceof Number) {
+                amount = ((Number) raw).intValue();
+            } else if (raw != null) {
+                amount = Integer.parseInt(
+                        String.valueOf(raw).replaceAll("[^0-9\\-]", ""));
+            }
+        } catch (NumberFormatException ignored) {
             amount = 0;
         }
+
+        // FIX: tránh ghi amount âm kiểu "spend" với số dương
+        // Chuẩn hóa: spend luôn âm, earn/bonus luôn dương
+        if (type.equals("spend") && amount > 0) amount = -amount;
+        if (!type.equals("spend") && amount < 0) amount = Math.abs(amount);
 
         Transaction tx = Transaction.builder()
                 .user(user)

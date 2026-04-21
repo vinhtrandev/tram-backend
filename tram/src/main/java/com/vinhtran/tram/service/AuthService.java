@@ -10,12 +10,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -25,60 +26,72 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
 
-    // ID khớp với config.js
     private static final Map<String, Integer> ITEM_PRICES = Map.ofEntries(
-            Map.entry("trail_star",     300),
-            Map.entry("halo_star",      500),
-            Map.entry("sound_rain",     100),
-            Map.entry("sound_wave",     150),
-            Map.entry("sound_wind",     200),
-            Map.entry("future_letter",  800),
-            Map.entry("meditation",    1000),
-            Map.entry("voucher_cafe",  1500),
-            Map.entry("gift_box",      3500),
-            Map.entry("plant_tree",    5000),
-            Map.entry("meal_children", 7000)
+            Map.entry("trail_star",      300),
+            Map.entry("halo_star",       500),
+            Map.entry("sound_rain",      100),
+            Map.entry("sound_wave",      150),
+            Map.entry("sound_wind",      200),
+            Map.entry("future_letter",   800),
+            Map.entry("meditation",     1000),
+            Map.entry("voucher_cafe",   1500),
+            Map.entry("gift_box",       3500),
+            Map.entry("plant_tree",     5000),
+            Map.entry("meal_children",  7000)
     );
+
+    // ══════════════════════════════════════════
+    // REGISTER
+    // ══════════════════════════════════════════
 
     @Transactional
     public AuthResponse register(AuthRequest req) {
-        if (userRepository.existsByNickname(req.getNickname())) {
+        if (userRepository.existsByNickname(req.getNickname()))
             throw new RuntimeException("Mật danh đã tồn tại");
-        }
+
         User user = User.builder()
                 .nickname(req.getNickname())
                 .passwordHash(passwordEncoder.encode(req.getPassword()))
                 .build();
         user = userRepository.save(user);
-        String token = jwtUtil.generateToken(user.getNickname());
-        return toAuthResponse(user, token);
+        return toAuthResponse(user, jwtUtil.generateToken(user.getNickname()));
     }
+
+    // ══════════════════════════════════════════
+    // LOGIN
+    // ══════════════════════════════════════════
 
     @Transactional
     public AuthResponse login(AuthRequest req) {
         User user = userRepository.findByNickname(req.getNickname())
+                // FIX: thông báo chung chung để tránh username enumeration attack
                 .orElseThrow(() -> new RuntimeException("Sai mật danh hoặc chìa khóa"));
-        if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
+
+        if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash()))
             throw new RuntimeException("Sai mật danh hoặc chìa khóa");
-        }
-        user.setLastLogin(java.time.LocalDateTime.now());
-        // FIX: Ghi streak vào DB khi login
-        _updateStreakOnServer(user);
+
+        user.setLastLogin(Instant.now());
+        updateStreakOnLogin(user);
         userRepository.save(user);
-        String token = jwtUtil.generateToken(user.getNickname());
-        return toAuthResponse(user, token);
+
+        return toAuthResponse(user, jwtUtil.generateToken(user.getNickname()));
     }
 
-    // FIX BUG: getMe dùng readOnly=false vì cần update streak
-    @Transactional
+    // ══════════════════════════════════════════
+    // GET ME
+    // ══════════════════════════════════════════
+
+    @Transactional(readOnly = true)
     public AuthResponse getMe(String nickname) {
         User user = userRepository.findByNickname(nickname)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
-        // FIX: Không generate token mới - dùng lại token cũ từ client
-        // Chỉ trả về data user, không cấp token mới để tránh invalidate session
-        String token = jwtUtil.generateToken(user.getNickname());
-        return toAuthResponse(user, token);
+        // FIX: không cấp token mới — client giữ token cũ
+        return toAuthResponse(user, null);
     }
+
+    // ══════════════════════════════════════════
+    // UNLOCK ITEM
+    // ══════════════════════════════════════════
 
     @Transactional
     public AuthResponse unlockItem(String nickname, String itemId) {
@@ -86,96 +99,97 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
 
         Integer price = ITEM_PRICES.get(itemId);
-        if (price == null) {
-            throw new RuntimeException("Item không tồn tại");
-        }
+        if (price == null) throw new RuntimeException("Item không tồn tại");
+        if (user.getPoints() < price) throw new RuntimeException("Không đủ ✨ Tinh Tú");
 
-        if (user.getPoints() < price) {
-            throw new RuntimeException("Không đủ ✨ Tinh Tú");
-        }
-
-        String raw = user.getUnlockedItems() == null ? "" : user.getUnlockedItems();
-        List<String> unlocked = new ArrayList<>(
-                raw.isEmpty() ? List.of() : List.of(raw.split(","))
-        );
-
-        if (unlocked.contains(itemId)) {
-            throw new RuntimeException("Đã mở khóa rồi");
-        }
+        List<String> unlocked = parseCommaList(user.getUnlockedItems());
+        if (unlocked.contains(itemId)) throw new RuntimeException("Đã mở khóa rồi");
 
         unlocked.add(itemId);
         user.setUnlockedItems(String.join(",", unlocked));
         user.addPoints(-price);
-
-        // FIX: Phải save user sau khi thay đổi points và unlocked
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(user.getNickname());
-        return toAuthResponse(user, token);
+        return toAuthResponse(user, jwtUtil.generateToken(user.getNickname()));
     }
 
-    // FIX: Thêm endpoint addPoints để frontend gọi khi hoàn thành mission
+    // ══════════════════════════════════════════
+    // ADD POINTS
+    // ══════════════════════════════════════════
+
     @Transactional
     public AuthResponse addPoints(String nickname, long amount) {
         User user = userRepository.findByNickname(nickname)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
         user.addPoints(amount);
-        userRepository.save(user); // ← Lưu vào DB
-        String token = jwtUtil.generateToken(user.getNickname());
-        return toAuthResponse(user, token);
+        userRepository.save(user);
+        // FIX: trả token mới để client cập nhật state
+        return toAuthResponse(user, jwtUtil.generateToken(user.getNickname()));
     }
 
-    // FIX: Sync streak từ client lên server
+    // ══════════════════════════════════════════
+    // SYNC STREAK
+    // ══════════════════════════════════════════
+
     @Transactional
-    public AuthResponse syncStreak(String nickname, List<String> streakDates) {
+    public AuthResponse syncStreak(String nickname, List<String> clientDates) {
         User user = userRepository.findByNickname(nickname)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy user"));
 
-        // Merge streak client + server, giữ unique và sort
-        String raw = user.getStreakDates() == null ? "" : user.getStreakDates();
-        List<String> serverDates = raw.isEmpty()
-                ? new ArrayList<>()
-                : new ArrayList<>(Arrays.asList(raw.split(",")));
+        List<String> serverDates = parseCommaList(user.getStreakDates());
 
-        for (String d : streakDates) {
-            if (!serverDates.contains(d)) serverDates.add(d);
+        for (String d : clientDates) {
+            // FIX: validate format yyyy-MM-dd và tránh inject date rác
+            if (d != null && d.matches("\\d{4}-\\d{2}-\\d{2}") && !serverDates.contains(d))
+                serverDates.add(d);
         }
 
-        // Chỉ giữ 7 ngày gần nhất
         serverDates.sort(String::compareTo);
-        if (serverDates.size() > 7) {
+        // Chỉ giữ 7 ngày gần nhất
+        if (serverDates.size() > 7)
             serverDates = serverDates.subList(serverDates.size() - 7, serverDates.size());
-        }
 
         user.setStreakDates(String.join(",", serverDates));
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(user.getNickname());
-        return toAuthResponse(user, token);
+        return toAuthResponse(user, jwtUtil.generateToken(user.getNickname()));
     }
 
-    // Helper: cập nhật streak hôm nay vào DB
-    private void _updateStreakOnServer(User user) {
-        String today = LocalDate.now().toString();
-        String raw = user.getStreakDates() == null ? "" : user.getStreakDates();
-        List<String> dates = raw.isEmpty()
-                ? new ArrayList<>()
-                : new ArrayList<>(Arrays.asList(raw.split(",")));
+    // ══════════════════════════════════════════
+    // HELPERS
+    // ══════════════════════════════════════════
+
+    /**
+     * Cập nhật streak khi user login.
+     * FIX: Dùng UTC nhất quán với toàn bộ hệ thống.
+     * LocalDate.now() không truyền timezone → phụ thuộc JVM timezone.
+     */
+    private void updateStreakOnLogin(User user) {
+        String today = LocalDate.now(ZoneOffset.UTC).toString(); // "2026-04-20"
+        List<String> dates = parseCommaList(user.getStreakDates());
         if (!dates.contains(today)) {
             dates.add(today);
-            if (dates.size() > 7) dates = dates.subList(dates.size() - 7, dates.size());
+            dates.sort(String::compareTo);
+            if (dates.size() > 7)
+                dates = dates.subList(dates.size() - 7, dates.size());
             user.setStreakDates(String.join(",", dates));
         }
     }
 
-    // Helper: build AuthResponse chuẩn
+    /** Parse chuỗi "a,b,c" → List mutable, tránh NPE */
+    private List<String> parseCommaList(String raw) {
+        if (raw == null || raw.isBlank()) return new ArrayList<>();
+        return new ArrayList<>(Arrays.asList(raw.split(",")));
+    }
+
     private AuthResponse toAuthResponse(User user, String token) {
         return new AuthResponse(
                 user.getId(),
                 user.getNickname(),
                 token,
                 user.getPoints(),
-                user.getUnlockedItems()
+                user.getUnlockedItems() != null ? user.getUnlockedItems() : "",
+                user.getStreakDates()   != null ? user.getStreakDates()   : ""
         );
     }
 }

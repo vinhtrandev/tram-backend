@@ -1,9 +1,9 @@
-// com/vinhtran/tram/entity/Transaction.java
 package com.vinhtran.tram.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.time.LocalDateTime;
+
+import java.time.Instant;
 
 @Entity
 @Table(name = "transactions")
@@ -19,7 +19,7 @@ public class Transaction {
     private User user;
 
     @Column(nullable = false, length = 20)
-    private String type; // earn | spend | bonus
+    private String type;
 
     @Column(nullable = false)
     private int amount;
@@ -27,11 +27,18 @@ public class Transaction {
     @Column(nullable = false, length = 200)
     private String description;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    /**
+     * Dùng @Column(columnDefinition) để ép Hibernate luôn đọc/ghi UTC.
+     * DB lưu "timestamp without time zone" → Hibernate mặc định hiểu là
+     * giờ JVM (có thể lệch nếu server không set timezone). Fix: luôn
+     * format/parse rõ ràng qua Instant + toString() có "Z".
+     */
+    @Column(name = "created_at", nullable = false, updatable = false,
+            columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    private Instant createdAt;
 
     @PrePersist
     protected void onCreate() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = Instant.now();
     }
 }

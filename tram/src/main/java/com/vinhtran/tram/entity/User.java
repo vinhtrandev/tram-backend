@@ -1,11 +1,9 @@
 package com.vinhtran.tram.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.*;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,7 +17,6 @@ public class User {
     private Long id;
 
     @Column(unique = true, nullable = false, length = 50)
-    @NotBlank @Size(min = 3, max = 50)
     private String nickname;
 
     @Column(name = "password_hash", nullable = false)
@@ -29,11 +26,14 @@ public class User {
     @Builder.Default
     private long points = 0;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
+    /* FIX: dùng Instant (UTC) thay LocalDateTime → không bị lệch timezone */
+    @Column(name = "created_at", nullable = false, updatable = false,
+            columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    private Instant createdAt;
 
-    @Column(name = "last_login")
-    private LocalDateTime lastLogin;
+    @Column(name = "last_login",
+            columnDefinition = "TIMESTAMP WITH TIME ZONE")
+    private Instant lastLogin;
 
     @Column(name = "streak_dates", columnDefinition = "TEXT")
     @Builder.Default
@@ -49,7 +49,7 @@ public class User {
 
     @PrePersist
     protected void onCreate() {
-        if (createdAt == null) createdAt = LocalDateTime.now();
+        if (createdAt == null) createdAt = Instant.now();
     }
 
     public void addPoints(long amount) {

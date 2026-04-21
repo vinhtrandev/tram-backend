@@ -1,4 +1,3 @@
-// com/vinhtran/tram/repository/TransactionRepository.java
 package com.vinhtran.tram.repository;
 
 import com.vinhtran.tram.entity.Transaction;
